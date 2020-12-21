@@ -4,6 +4,9 @@ import matplotlib.pyplot as plt
 import skimage.color
 import os
 import logging
+import xlsxwriter
+import math
+from PIL import Image, ImageDraw
 
 
 class Save:
@@ -27,13 +30,17 @@ class Save:
             NIR_DATA: False,
             TWI_DATA: False,
             THI_DATA: False,
+            TLI_DATA: False,
+            OHI_DATA: False,
             OG_IMAGE: False,
             OG_RGB_DATA: False,
             OG_STO2_DATA: False,
             OG_NIR_DATA: False,
             OG_TWI_DATA: False,
             OG_THI_DATA: False,
+            OG_OHI_DATA: False,
             REC_IMAGE: False,
+            TIF: False,
             REC_IMAGE_WO_SCALE: False,
             WL_DATA: False,
             IDX_DATA: False,
@@ -114,6 +121,7 @@ class Save:
             if path in selected_paths:
                 self._save_to_path(path)
 
+
     def _save_all(self):
         for path, _ in self.listener.results.items():
             self._save_to_path(path)
@@ -128,6 +136,9 @@ class Save:
         self.current_new_result = self.current_result_list[3]
 
         self.current_output_path = os.path.dirname(path)
+        
+        if self.saves[TIF]:
+            self.__save_tif()
 
         if self.saves[PT1] or self.saves[PT2] or self.saves[PT3] or \
                 self.saves[PT4] or self.saves[PT5] or self.saves[PT6] or \
@@ -137,7 +148,7 @@ class Save:
 
         if self.saves[OG_RGB_DATA] or self.saves[OG_STO2_DATA] or \
                 self.saves[OG_NIR_DATA] or self.saves[OG_THI_DATA] or \
-                self.saves[OG_TWI_DATA]:
+                self.saves[OG_TWI_DATA] or self.saves[OG_TLI_DATA] or self.saves[OG_OHI_DATA]:
             self.__save_original_image()
 
         if self.saves[HISTOGRAM_IMAGE] or \
@@ -151,7 +162,7 @@ class Save:
             self.__save_absorption_spec()
 
         if self.saves[STO2_DATA] or self.saves[NIR_DATA] or \
-                self.saves[TWI_DATA] or self.saves[THI_DATA]:
+                self.saves[TWI_DATA] or self.saves[THI_DATA] or self.saves[TLI_DATA] or self.saves[OHI_DATA]:
             self.__save_recreated_image()
 
         if self.saves[WL_DATA] or self.saves[IDX_DATA]:
@@ -159,12 +170,58 @@ class Save:
 
     # ------------------------------------------------- SAVING HELPERS -----------------------------------------------
 
-    def __save_data(self, data, title, stats=[None, None], fmt=".csv", formatting="%.2f"):
-        output_path = self.current_output_path + "/" + title + fmt
+    def __save_data(self, data, title, stats=[None, None], fmt=".csv", formatting="%.2f", gradient = False):
+        if not os.path.exists(self.current_output_path + '/'+self.listener.output_folder_hypergui):
+            os.mkdir(self.current_output_path + '/'+self.listener.output_folder_hypergui)
+        output_path = self.current_output_path + '/'+self.listener.output_folder_hypergui + "/" + title + fmt
         logging.debug("SAVING DATA TO " + output_path)
         if stats != [None, None]:
             data = np.clip(data, a_min=stats[0], a_max=stats[1])
-        np.savetxt(self.current_output_path + "/" + title + fmt, data, delimiter=",", fmt=formatting)
+        if gradient:
+            x = data[:,0]
+            f = np.round(data[:,1],5)
+            f1 = np.round(np.gradient(f),5)
+            f2 = np.round(np.gradient(f1),5)
+            workbook = xlsxwriter.Workbook(self.current_output_path + '/'+self.listener.output_folder_hypergui +"/" + title + ".xlsx")
+            row = 0
+            row_2 = 0
+            row_3 = 0
+            col = 0
+            worksheet = workbook.add_worksheet('0_derivative')
+            np.savetxt(self.current_output_path + '/'+self.listener.output_folder_hypergui +"/" + title + "_0_derivative" + fmt, data, delimiter=",", fmt=formatting)
+            worksheet2 = workbook.add_worksheet("1_derivative")
+            np.savetxt(self.current_output_path + '/'+self.listener.output_folder_hypergui +"/" + title + "_1_derivative" + fmt, np.array(np.transpose([x,f1])), delimiter=",", fmt=formatting)
+            worksheet3 = workbook.add_worksheet("2_derivative")
+            np.savetxt(self.current_output_path + '/'+self.listener.output_folder_hypergui +"/" + title + "_2_derivative" + fmt, np.array(np.transpose([x,f2])), delimiter=",", fmt=formatting)
+            for idx, i in enumerate(x):
+                worksheet.write(row , col , i)
+                worksheet.write(row , col + 1, f[idx])
+                row += 1
+            for idx, i in enumerate(x):
+                worksheet2.write(row_2 , col , i)
+                worksheet2.write(row_2, col + 1, f1[idx])
+                row_2 += 1
+            for idx, i in enumerate(x):
+                worksheet3.write(row_3 , col , i)
+                worksheet3.write(row_3, col + 1, f2[idx])
+                row_3 += 1
+            workbook.close()
+        else:
+            x = data[:,0]
+            f = np.round(data[:,1],5)
+            workbook = xlsxwriter.Workbook(self.current_output_path + '/'+self.listener.output_folder_hypergui +"/" + title + ".xlsx")
+            row = 0
+            col = 0
+            worksheet = workbook.add_worksheet()
+            for idx, i in enumerate(x):
+                worksheet.write(row, col, i)
+                worksheet.write(row, col+ 1, f[idx])
+                row +=1
+            workbook.close()
+            np.savetxt(self.current_output_path + '/'+self.listener.output_folder_hypergui +"/" + title + fmt, data, delimiter=",", fmt=formatting)
+           
+            
+          
 
     def __save_image(self, data, name, is_image_with_scale, is_image_wo_scale, stats, cmap='jet', fmt=".png"):
         if is_image_with_scale:
@@ -175,7 +232,9 @@ class Save:
             self.__save_image_diagram(data, title, False, cmap, stats, fmt)
 
     def __save_image_diagram(self, data, title, scale, cmap, stats=[None, None], fmt=".png"):
-        output_path = self.current_output_path + "/" + title + fmt
+        if not os.path.exists(self.current_output_path + '/'+self.listener.output_folder_hypergui):
+            os.mkdir(self.current_output_path + '/'+self.listener.output_folder_hypergui)
+        output_path = self.current_output_path + '/'+self.listener.output_folder_hypergui +"/" + title + fmt
         logging.debug("SAVING IMAGE TO " + output_path)
         plt.clf()
         plt.imshow(data, cmap=cmap, vmin=stats[0], vmax=stats[1])
@@ -200,16 +259,30 @@ class Save:
     # ------------------------------------------------- ORIGINAL IMAGE -----------------------------------------------
 
     def __save_points(self):
-        point_bools = [self.saves[PT1], self.saves[PT2], self.saves[PT3], self.saves[PT4], self.saves[PT5],
-                       self.saves[PT6], self.saves[PT7], self.saves[PT8], self.saves[PT9], self.saves[PT10]]
-        data = self.listener.get_coords(point_bools)
+        data = self.listener.get_coords()
         self.__save_data(data, title="MASK_COORDINATES")
-
+    
+    def __save_tif(self):
+        polygon = [point for point in self.listener.modules[ORIGINAL_COLOUR].coords_list if point != (None, None)]
+        if len(polygon) >= 2:
+            img = Image.new('L', (640, 480), 0)
+            ImageDraw.Draw(img).polygon(polygon, outline=1, fill=1)
+            output_path_end = self.listener.modules[ORIGINAL_COLOUR].tif_save_path_end
+            output_path_base = self.current_output_path + '/'+self.listener.output_folder_hypergui+"/"
+            if not os.path.exists(output_path_base):
+                os.mkdir(output_path_base)
+            mask_img = Image.fromarray(((np.array(img)*-1+1)*255).astype("uint8"), 'L')
+            mask_img.save(output_path_base + output_path_end + ".tif")
+        else:
+            print("Draw a mask to save TIF.")
+        
     def instant_save_points(self, data, title):
         for path, _ in self.listener.results.items():
             selected_paths = self.listener.selected_paths
             if path in selected_paths:
-                output_path = os.path.dirname(path) + "/" + title + '.csv'
+                if not os.path.exists(os.path.dirname(path) + '/'+self.listener.output_folder_hypergui):
+                    os.mkdir(os.path.dirname(path) + '/'+self.listener.output_folder_hypergui)
+                output_path = os.path.dirname(path) + '/'+self.listener.output_folder_hypergui + "/" + title + '.csv'
                 logging.debug("SAVING DATA TO " + output_path)
                 np.savetxt(output_path, data, delimiter=",", fmt="%.2f")
 
@@ -234,7 +307,11 @@ class Save:
             self.__save_og_data_image(cmap, mask, 'THI', self.current_hist_result.get_thi_og())
         if self.saves[OG_TWI_DATA]:
             self.__save_og_data_image(cmap, mask, 'TWI', self.current_hist_result.get_twi_og())
-
+        if self.saves[OG_TLI_DATA]:
+            self.__save_og_data_image(cmap, mask, 'TLI', self.current_hist_result.get_tli_og())
+        if self.saves[OG_OHI_DATA]:
+            self.__save_og_data_image(cmap, mask, 'OHI', self.current_hist_result.get_ohi_og())
+            
     def __save_og_data_image(self, cmap, mask, display, current_result):
         if self.saves[WHOLE_IMAGE_SAVE]:
             title = self.listener.get_save_og_info(display, image=False) + '_whole'
@@ -383,7 +460,9 @@ class Save:
             self.__save_histogram_diagram(data, name, False, masked, fmt=fmt)
 
     def __save_histogram_diagram(self, data, title, scale, masked, fmt=".png"):
-        output_path = self.current_output_path + "/" + title + fmt
+        if not os.path.exists(self.current_output_path + '/'+self.listener.output_folder_hypergui):
+            os.mkdir(self.current_output_path + '/'+self.listener.output_folder_hypergui)
+        output_path = self.current_output_path + '/'+self.listener.output_folder_hypergui +"/" + title + fmt
         logging.debug("SAVING HISTOGRAM TO " + output_path)
         plt.clf()
         axes = plt.subplot(111)
@@ -391,10 +470,6 @@ class Save:
         (x_low, x_high, y_low, y_high, step) = stats
         start = x_low
         stop = x_high + step
-        print(start, stop, step)
-        print(stats)
-        print(len(data))
-        print(data[:30])
         bins = np.arange(start=start, stop=stop, step=step)
         # plot histogram
         axes.hist(data, bins=bins)
@@ -443,7 +518,6 @@ class Save:
     def __save_absorption_spec(self):
         if self.saves[WHOLE_IMAGE_SAVE]:
             data = self.current_abs_result.absorption_roi[:, 1]
-            print(self.listener.modules[ABSORPTION_SPEC].whole_stats)
             if self.listener.modules[ABSORPTION_SPEC].whole_stats[4]:
                 data = self.norm(data)
             self.__save_absorption_spec_graph(data, self.saves[ABSORPTION_SPEC_IMAGE],
@@ -452,7 +526,6 @@ class Save:
             if self.saves[ABSORPTION_SPEC_EXCEL]:
                 stats = self.listener.generate_abs_values_for_saving(False, data)
                 (x_low, x_high, y_low, y_high, norm) = stats
-                print(y_low, y_high)
                 data1 = np.arange(x_low // 5 * 5, x_high // 5 * 5 + 5, 5)
                 data2 = self.current_abs_result.absorption_roi[:, 1][int((x_low - 500) / 5):int((x_high - 500) / 5) + 1]
                 if self.listener.modules[ABSORPTION_SPEC].whole_stats[4]:
@@ -460,10 +533,9 @@ class Save:
                 data2 = np.clip(data2, a_min=y_low, a_max=y_high)
                 data = np.asarray([data1, data2]).T
                 name = self.listener.get_save_abs_info(scale=True, image=False, masked=False, data=data)
-                self.__save_data(data, name, formatting="%.5f")
+                self.__save_data(data, name, formatting="%.5f", gradient=True)
 
         if self.saves[MASKED_IMAGE_SAVE]:
-            print(self.listener.modules[ABSORPTION_SPEC].masked_stats)
             data = self.current_abs_result.absorption_roi_masked[:, 1]
             if self.listener.modules[ABSORPTION_SPEC].masked_stats[4]:
                 data = self.norm(data)
@@ -481,24 +553,40 @@ class Save:
                 data2 = np.clip(data2, a_min=y_low, a_max=y_high)
                 data = np.asarray([data1, data2]).T
                 name = self.listener.get_save_abs_info(scale=True, image=False, masked=True, data=data)
-                self.__save_data(data, name, formatting="%.5f")
+                self.__save_data(data, name, formatting="%.5f", gradient=True)
 
     def __save_absorption_spec_graph(self, data, is_abspc_with_scale, is_abspc_wo_scale, masked, fmt=".png"):
         if is_abspc_with_scale:
             name = self.listener.get_save_abs_info(scale=True, image=True, masked=masked, data=data)
-            self.__save_absorption_spec_diagram(data, name, True, masked, fmt=fmt)
+            self.__save_absorption_spec_diagram(data, name + "_0_derivative", True, masked, fmt=fmt)
+            y_lim=[np.min(np.gradient(data)), np.max(np.gradient(data))]
+            self.__save_absorption_spec_diagram(np.gradient(data), name + "_1_derivative", True, masked, fmt=fmt, y_lim=y_lim)
+            y_lim=[np.min(np.gradient(np.gradient(data))), np.max(np.gradient(np.gradient(data)))]
+            self.__save_absorption_spec_diagram(np.gradient(np.gradient(data)), name + "_2_derivative", True, masked, fmt=fmt, y_lim=y_lim)
         if is_abspc_wo_scale:
             name = self.listener.get_save_abs_info(scale=False, image=True, masked=masked, data=data)
-            self.__save_absorption_spec_diagram(data, name, False, masked, fmt=fmt)
-
-    def __save_absorption_spec_diagram(self, data, title, scale, masked, fmt=".png"):
-        output_path = self.current_output_path + "/" + title + fmt
+            self.__save_absorption_spec_diagram(data, name + "_0_derivative", False, masked, fmt=fmt)
+            y_lim=[np.min(np.gradient(data)), np.max(np.gradient(data))]
+            self.__save_absorption_spec_diagram(np.gradient(data), name + "_1_derivative", False, masked, fmt=fmt, y_lim=y_lim)
+            y_lim=[np.min(np.gradient(np.gradient(data))), np.max(np.gradient(np.gradient(data)))]
+            self.__save_absorption_spec_diagram(np.gradient(np.gradient(data)), name + "_2_derivative", False, masked, fmt=fmt, y_lim=y_lim)
+            
+    def __save_absorption_spec_diagram(self, data, title, scale, masked, fmt=".png", y_lim = None):
+        if not os.path.exists(self.current_output_path + '/'+self.listener.output_folder_hypergui):
+            os.mkdir(self.current_output_path + '/'+self.listener.output_folder_hypergui)
+        output_path = self.current_output_path + '/'+self.listener.output_folder_hypergui +"/" + title + fmt
         logging.debug("SAVING ABSORPTION SPEC" + output_path)
         plt.clf()
         axes = plt.subplot(111)
         x_vals = np.arange(500, 1000, 5)
         stats = self.listener.generate_abs_values_for_saving(masked, data)
         (x_low, x_high, y_low, y_high, norm) = stats
+        if y_lim is not None:
+            #title = title.replace(str(round(y_low,3)), str(round(y_lim[0], 4)))
+            #title = title.replace(str(round(y_high,3)), str(round(y_lim[1], 4)))
+            y_low = y_lim[0]
+            y_high = y_lim[1]
+            #output_path = self.current_output_path + "/" + title + fmt
         # plot absorption spec
         axes.plot(x_vals, data, '-', lw=0.5)
         axes.grid(linestyle=':', linewidth=0.5)
@@ -538,6 +626,10 @@ class Save:
             self.__save_rec_data_image(cmap, 'THI', self.current_rec_result.thi, self.current_rec_result.thi_masked)
         if self.saves[TWI_DATA]:
             self.__save_rec_data_image(cmap, 'TWI', self.current_rec_result.twi, self.current_rec_result.twi_masked)
+        if self.saves[TLI_DATA]:
+            self.__save_rec_data_image(cmap, 'TLI', self.current_rec_result.tli, self.current_rec_result.tli_masked)
+        if self.saves[OHI_DATA]:
+            self.__save_rec_data_image(cmap, 'OHI', self.current_rec_result.ohi, self.current_rec_result.ohi_masked)
 
     def __save_rec_data_image(self, cmap, display, current_result_display, current_result_display_masked):
         scale = [REC_IMAGE, REC_IMAGE_WO_SCALE]
