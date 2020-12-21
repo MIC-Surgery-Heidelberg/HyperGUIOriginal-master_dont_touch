@@ -19,7 +19,6 @@ class ModuleListener:
         self.current_rendered_result_path = None
         self.selected_paths = []
         self.output_folder = None  # init with None intentionally
-        self.output_folder_hypergui = '_hypergui_1'
 
         # NOTE: THE FOLLOWING ONLY CONTROLS WHAT TO RENDER, NOT WHAT IS SAVED
 
@@ -76,9 +75,6 @@ class ModuleListener:
         logging.debug("SELECTED DATA CUBE AT: " + dc_path)
         self.current_rendered_result_path = dc_path
         self.broadcast_new_data()
-    
-    def set_output_folder_hypergui(self, string):
-        self.output_folder_hypergui = '_hypergui_' + string
 
     def update_selected_paths(self, selected_paths):
         self.selected_paths = selected_paths
@@ -92,7 +88,8 @@ class ModuleListener:
         self.modules[module_name] = mod
 
     def instant_save_points(self):
-        data = self.get_coords()
+        point_bools = self.modules[ORIGINAL_COLOUR].get_bools()
+        data = self.get_coords(point_bools)
         self.modules[SAVE].instant_save_points(data, title="MASK_COORDINATES")
 
     def update_saved(self, saves_key, value):
@@ -123,10 +120,10 @@ class ModuleListener:
         else:
             return self.get_result(self.current_rendered_result_path)[3].index
 
-    def get_coords(self):
+    def get_coords(self, point_bools):
         point_coords = self.modules[ORIGINAL_COLOUR].coords_list
-        data = [[float(point_coords[i][0] + 1), float(point_coords[i][1] + 1)] for i in range(100) if
-                point_coords[i] != (None, None)]
+        data = [[float(point_coords[i][0] + 1), float(point_coords[i][1] + 1)] for i in range(10) if
+                point_bools[i] and point_coords[i] != (None, None)]
         return data
 
     # ------------------------------------------------- DATA GETTERS -------------------------------------------------
@@ -271,16 +268,6 @@ class ModuleListener:
             arr = self.modules[RECREATED_COLOUR].twi_stats
             if arr == [None, None]:
                 data = self.results[path][2].twi
-                arr = [np.round(np.min(data), 4), np.round(np.max(data), 4)]
-        if display == TLI:
-            arr = self.modules[RECREATED_COLOUR].tli_stats
-            if arr == [None, None]:
-                data = self.results[path][2].tli
-                arr = [np.round(np.min(data), 4), np.round(np.max(data), 4)]
-        if display == OHI:
-            arr = self.modules[RECREATED_COLOUR].ohi_stats
-            if arr == [None, None]:
-                data = self.results[path][2].ohi
                 arr = [np.round(np.min(data), 4), np.round(np.max(data), 4)]
         return arr
 
@@ -569,19 +556,13 @@ class ModuleListener:
 
     # ------------------------------------------------ BROADCASTERS --------------------------------------------------
 
-    def broadcast_new_hypergui_folder_to_prediction(self):
-        self.modules[PREDICTION].update_output_path()
-        
     def broadcast_new_data(self):
         self.broadcast_to_recreated_image()
         self.broadcast_to_new_image()
         self.broadcast_to_histogram()
         self.broadcast_to_absorption_spec()
         self.broadcast_to_original_image()
-        self.broadcast_to_prediction() #JO
-        self.broadcast_to_prediction_2()
-    
-        
+
     def broadcast_to_histogram(self):
         num = self.modules[HISTOGRAM].spec_number
         if num in [1, 2, 3, 4, 5, 6, 7, 8]:
@@ -610,16 +591,6 @@ class ModuleListener:
         else:
             new_absorption_spec = self.get_result(self.current_rendered_result_path)[1].absorption_roi[:, 1]
         self.modules[ABSORPTION_SPEC].update_absorption_spec(new_absorption_spec)
-        
-    def broadcast_to_prediction(self): #JO
-        self.modules[PREDICTION].update_cube()
-        new_data = self.get_result(self.current_rendered_result_path)[0].get_rgb_og()
-        self.modules[PREDICTION].update_RGB(new_data)
-        
-    def broadcast_to_prediction_2(self): #JO
-        self.modules[PREDICTION2].update_cube(self.current_rendered_result_path)
-        new_data = self.get_result(self.current_rendered_result_path)[0].get_rgb_og()
-        self.modules[PREDICTION2].update_RGB(new_data)
 
     def broadcast_to_recreated_image(self):
         display_mode = self.modules[RECREATED_COLOUR].displayed_image_mode
@@ -632,10 +603,6 @@ class ModuleListener:
             new_data = self.get_result(self.current_rendered_result_path)[2].thi
         elif display_mode == TWI:
             new_data = self.get_result(self.current_rendered_result_path)[2].twi
-        elif display_mode == TLI:
-            new_data = self.get_result(self.current_rendered_result_path)[2].tli
-        elif display_mode == OHI:
-            new_data = self.get_result(self.current_rendered_result_path)[2].ohi
         self.modules[RECREATED_COLOUR].update_recreated_image(new_data)
 
     def broadcast_to_new_image(self):
@@ -663,15 +630,9 @@ class ModuleListener:
         elif display_mode == THI:
             logging.debug("GETTING THI IMAGE")
             new_data = self.get_result(self.current_rendered_result_path)[0].get_thi_og()
-        elif display_mode == TLI:
-            logging.debug("GETTING TLI IMAGE")
-            new_data = self.get_result(self.current_rendered_result_path)[0].get_tli_og()
         elif display_mode == TWI:
             logging.debug("GETTING TWI IMAGE")
             new_data = self.get_result(self.current_rendered_result_path)[0].get_twi_og()
-        elif display_mode == OHI:
-            logging.debug("GETTING OHI IMAGE")
-            new_data = self.get_result(self.current_rendered_result_path)[0].get_ohi_og()
         self.modules[ORIGINAL_COLOUR].update_original_image(new_data)
 
     # ----------------------------------------------- MODULE UPDATERS ------------------------------------------------
@@ -725,10 +686,10 @@ class ModuleListener:
     # Use the path of the data cube as an identifier
 
     def _make_new_hist_analysis(self, path, data_cube, wavelength, mask, spec_tup):
+        print(path)
         self.results[path][0] = HistogramAnalysis(path, data_cube, wavelength, spec_tup, ModuleListener(), mask)
 
     def _make_new_abs_analysis(self, path, data_cube, wavelength, mask, spec_tup):
-        print(wavelength)
         self.results[path][1] = AbsSpecAnalysis(path, data_cube, wavelength, spec_tup, ModuleListener(), mask)
 
     def _make_new_rec_analysis(self, path, data_cube, wavelength, mask, spec_tup, params):

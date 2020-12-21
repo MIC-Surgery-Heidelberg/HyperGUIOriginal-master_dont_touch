@@ -30,14 +30,6 @@ class RecColour:
         self.twi_button = None
         self.twi_checkbox = None
         self.twi_checkbox_value = IntVar()
-    
-        self.ohi_button = None
-        self.ohi_checkbox = None
-        self.ohi_checkbox_value = IntVar()
-        
-        self.tli_button = None
-        self.tli_checkbox = None
-        self.tli_checkbox_value = IntVar()
 
         self.gs = False
         self.gs_dropdown = None
@@ -122,18 +114,12 @@ class RecColour:
             self.thi_stats = [np.round(lower, 4), np.round(upper, 4)]
         if self.displayed_image_mode == TWI:
             self.twi_stats = [np.round(lower, 4), np.round(upper, 4)]
-        if self.displayed_image_mode == TLI:
-            self.tli_stats = [np.round(lower, 4), np.round(upper, 4)]
-        if self.displayed_image_mode == OHI:
-            self.ohi_stats = [np.round(lower, 4), np.round(upper, 4)]
 
     def _init_widget(self):
         self._build_sto2()
         self._build_nir()
         self._build_thi()
         self._build_twi()
-        self._build_ohi()
-        self._build_tli()
         self._build_gs_dropdown()
         self._build_save()
         self._build_save_wo_scale()
@@ -167,13 +153,13 @@ class RecColour:
         self.drop_down_menu = OptionMenu(self.root, self.drop_down_var, *self.choices, command=self.__update_data)
         self.drop_down_menu.configure(highlightthickness=0, width=1,
                                       anchor='w', padx=15)
-        self.drop_down_menu.grid(column=2, row=0, columnspan=2, padx=(0, 10))
+        self.drop_down_menu.grid(column=2, row=0, columnspan=1, padx=(0, 10))
 
     def _build_gs_dropdown(self):
         self.gs_var.set(self.gs_choices[0])
         self.gs_dropdown = OptionMenu(self.root, self.gs_var, *self.gs_choices, command=self.__update_gs)
         self.gs_dropdown.configure(highlightthickness=0, width=1, anchor='w', padx=15)
-        self.gs_dropdown.grid(column=4, row=0, columnspan=2, padx=(0, 15))
+        self.gs_dropdown.grid(column=3, row=0, columnspan=1, padx=(0, 15))
 
     # ---------------------------------------------- BUILDERS (DISPLAY) ----------------------------------------------
 
@@ -209,22 +195,6 @@ class RecColour:
                                           inner_padx=0, inner_pady=0, outer_padx=(0, 10))
         self.twi_checkbox.deselect()
         self.twi_checkbox.bind('<Button-1>', self.__update_twi_check_status)
-        
-    def _build_tli(self):
-        self.tli_button = make_button(self.root, text="TLI", width=6, row=1, column=4, command=self.__update_to_tli,
-                                      inner_padx=0, inner_pady=5, outer_padx=(0, 15))
-        self.tli_checkbox = make_checkbox(self.root, "", row=1, column=4, var=self.tli_checkbox_value, sticky=NE,
-                                          inner_padx=0, inner_pady=0, outer_padx=(0, 10))
-        self.tli_checkbox.deselect()
-        self.tli_checkbox.bind('<Button-1>', self.__update_twi_check_status)
-        
-    def _build_ohi(self):
-        self.ohi_button = make_button(self.root, text="OHI", width=6, row=1, column=5, command=self.__update_to_ohi,
-                                      inner_padx=0, inner_pady=5, outer_padx=(0, 15))
-        self.ohi_checkbox = make_checkbox(self.root, "", row=1, column=5, var=self.ohi_checkbox_value, sticky=NE,
-                                          inner_padx=0, inner_pady=0, outer_padx=(0, 10))
-        self.ohi_checkbox.deselect()
-        self.ohi_checkbox.bind('<Button-1>', self.__update_ohi_check_status)
 
     # ------------------------------------------------ BUILDERS (SAVE) -----------------------------------------------
 
@@ -282,12 +252,12 @@ class RecColour:
         if self.recreated_colour_image_data is None:
             # Placeholder
             self.recreated_colour_image = make_label(self.root, "recreated_colour image placeholder", row=2, column=0,
-                                                     rowspan=4, columnspan=6, inner_pady=50, inner_padx=50,
+                                                     rowspan=4, columnspan=4, inner_pady=50, inner_padx=50,
                                                      outer_padx=0, outer_pady=(15, 10))
         else:
             logging.debug("BUILDING RECREATED COLOUR IMAGE...")
             (self.recreated_colour_image_graph, self.recreated_colour_image, self.image_array) = \
-                make_image(self.root, self.recreated_colour_image_data, row=2, column=0, columnspan=6, rowspan=4,
+                make_image(self.root, self.recreated_colour_image_data, row=2, column=0, columnspan=4, rowspan=4,
                            lower_scale_value=self.lower_scale_value, upper_scale_value=self.upper_scale_value,
                            color_rgb=BACKGROUND, gs=self.gs)
             self.recreated_colour_image.get_tk_widget().bind('<Button-2>', self.__pop_up_image)
@@ -326,8 +296,6 @@ class RecColour:
         self.nir_button.config(foreground="black")
         self.thi_button.config(foreground="black")
         self.twi_button.config(foreground="black")
-        self.tli_button.config(foreground="black")
-        self.ohi_button.config(foreground="black")
         self.displayed_image_mode = STO2
         self.listener.broadcast_to_recreated_image()
 
@@ -336,8 +304,6 @@ class RecColour:
         self.nir_button.config(foreground="red")
         self.thi_button.config(foreground="black")
         self.twi_button.config(foreground="black")
-        self.tli_button.config(foreground="black")
-        self.ohi_button.config(foreground="black")
         self.displayed_image_mode = NIR
         self.listener.broadcast_to_recreated_image()
 
@@ -346,8 +312,6 @@ class RecColour:
         self.nir_button.config(foreground="black")
         self.thi_button.config(foreground="red")
         self.twi_button.config(foreground="black")
-        self.tli_button.config(foreground="black")
-        self.ohi_button.config(foreground="black")
         self.displayed_image_mode = THI
         self.listener.broadcast_to_recreated_image()
 
@@ -356,27 +320,7 @@ class RecColour:
         self.nir_button.config(foreground="black")
         self.thi_button.config(foreground="black")
         self.twi_button.config(foreground="red")
-        self.tli_button.config(foreground="black")
-        self.ohi_button.config(foreground="black")
         self.displayed_image_mode = TWI
-        self.listener.broadcast_to_recreated_image()
-    def __update_to_tli(self):
-        self.sto2_button.config(foreground="black")
-        self.nir_button.config(foreground="black")
-        self.thi_button.config(foreground="black")
-        self.twi_button.config(foreground="black")
-        self.tli_button.config(foreground="red")
-        self.ohi_button.config(foreground="black")
-        self.displayed_image_mode = TLI
-        self.listener.broadcast_to_recreated_image()
-    def __update_to_ohi(self):
-        self.sto2_button.config(foreground="black")
-        self.nir_button.config(foreground="black")
-        self.thi_button.config(foreground="black")
-        self.twi_button.config(foreground="black")
-        self.tli_button.config(foreground="black")
-        self.ohi_button.config(foreground="red")
-        self.displayed_image_mode = OHI
         self.listener.broadcast_to_recreated_image()
 
     def __update_gs(self, event):
@@ -408,14 +352,6 @@ class RecColour:
     def __update_thi_check_status(self, event):
         value = not bool(self.thi_checkbox_value.get())
         self.listener.update_saved(THI_DATA, value)
-
-    def __update_tli_check_status(self, event):
-        value = not bool(self.tli_checkbox_value.get())
-        self.listener.update_saved(TLI_DATA, value)
-
-    def __update_ohi_check_status(self, event):
-        value = not bool(self.ohi_checkbox_value.get())
-        self.listener.update_saved(OHI_DATA, value)
 
     def __update_save_with_scale_check_status(self, event):
         value = not bool(self.save_checkbox_value.get())
